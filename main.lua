@@ -158,7 +158,11 @@ local function claimAndExit()
     end
 end
 
-local function clearRaid()
+local function clear_raid()
+
+    if inRaid then return end -- tránh chạy chồng
+    inRaid = true -- SET NGAY Ở ĐÂY
+
     local character = player.Character or player.CharacterAdded:Wait()
     local hrp = character:WaitForChild("HumanoidRootPart")
 
@@ -167,28 +171,27 @@ local function clearRaid()
 
     repeat
         task.wait(0.5)
-        mob = getServerMob()
+        mob = get_server_mob()
         timeout += 0.5
 
         if timeout > 10 then
-            State.InRaid = false
+            inRaid = false
             return
         end
     until mob
 
-    State.InRaid = true
-
-    while mob and mob.Parent and State.AutoRaid do
+    while mob and mob.Parent and autoraid do
         hrp.CFrame = mob:GetPivot()
         task.wait(0.01)
-        mob = getServerMob()
+        mob = get_server_mob()
     end
 
-    if State.AutoRaid then
+    if autoraid then
         task.wait(1)
-        claimAndExit()
-        State.InRaid = false
+        claim_and_exit()
     end
+
+    inRaid = false -- reset sau khi xong
 end
 
 local function autoRaidLoop()
