@@ -299,7 +299,7 @@ Hatch:AddToggle({
 })
 
 local UI = Window:MakeTab({ "Ui", "sword" })
-UI:AddButton({
+UI:AddToggle({
 	Name = "Open Trait Ui",
 	Default = false,
 	Callback = function(value)
