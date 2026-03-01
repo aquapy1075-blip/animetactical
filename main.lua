@@ -1,131 +1,134 @@
+--//====================================================--
+--// SERVICES
+--//====================================================--
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local VirtualInputManager = game:GetService("VirtualInputManager")
+
 local player = Players.LocalPlayer
-local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/tlredz/Library/refs/heads/main/redz-V5-remake/main.luau"))()
 
+--//====================================================--
+--// LIBRARY
+--//====================================================--
+local Library = loadstring(game:HttpGet(
+    "https://raw.githubusercontent.com/tlredz/Library/refs/heads/main/redz-V5-remake/main.luau"
+))()
 
-local select_map = "Namex Planet"
-local select_difficulty = "Nightmare"
+--//====================================================--
+--// CONFIG
+--//====================================================--
+local Config = {
+    RaidMap = "Namex Planet",
+    RaidDifficulty = "Nightmare",
+    HatchMap = "Namex Planet",
 
-local autoraid = true
-local JOIN_COOLDOWN = 25
-local lastJoinTime = 0
+    JoinCooldown = 25
+}
 
+--//====================================================--
+--// STATE
+--//====================================================--
+local State = {
+    AutoRaid = true,
+    AutoHatch = false,
+    InRaid = false,
+
+    LastJoinTime = 0,
+    RaidLoopRunning = false,
+    HatchLoopRunning = false
+}
+
+--//====================================================--
+--// REFERENCES
+--//====================================================--
 local RaidsVisual = workspace:WaitForChild("Raids_Visual")
 
-local inRaid = false
-local CHECK_DELAY = 2
-
-local function is_my_raid_object(obj)
-    if not obj then return false end
-    return string.find(obj.Name, player.Name) ~= nil
-end
-
-local function updateRaidState()
-    for _, child in pairs(RaidsVisual:GetChildren()) do
-        if is_my_raid_object(child) then
-            inRaid = true
-            return
-        end
-    end
-    
-    -- nếu không thấy thì chờ 2s confirm
-    task.wait(CHECK_DELAY)
-    
-    for _, child in pairs(RaidsVisual:GetChildren()) do
-        if is_my_raid_object(child) then
-            inRaid = true
-            return
-        end
-    end
-    
-    inRaid = false
-end
-
-RaidsVisual.ChildAdded:Connect(updateRaidState)
-RaidsVisual.ChildRemoved:Connect(updateRaidState)
-
--- initial check
-updateRaidState()
--- ==============================
--- GET PARTY
--- ==============================
-local function get_party()
-    local parties = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Parties")
-    repeat task.wait() until parties:FindFirstChild(player.Name)
-    return parties[player.Name]
-end
-
--- ==============================
--- START RAID (SAFE)
--- ==============================
-local function auto_start_raid()
-
-    if tick() - lastJoinTime < JOIN_COOLDOWN then
-        return
-    end
-    
-    lastJoinTime = tick()
-
-    local character = player.Character or player.CharacterAdded:Wait()
-    local hrp = character:WaitForChild("HumanoidRootPart")
-
-    local pod = workspace:WaitForChild("Raids_Entering"):WaitForChild("Pod_03")
-    hrp.CFrame = pod:GetPivot()
-
-    task.wait(1.5)
-
-    local partyFolder = get_party()
-    if not partyFolder then return end
-
-    ReplicatedStorage.Remotes.Gameplays.RaidsLobbies:FireServer(partyFolder,"Worlds_"..select_map)
-    task.wait(0.5)
-    ReplicatedStorage.Remotes.Gameplays.RaidsLobbies:FireServer(partyFolder,"Diffculty_"..select_difficulty)
-    task.wait(0.5)
-    ReplicatedStorage.Remotes.Systems.RaidsEvent:FireServer(select_map,select_difficulty)
-
-	lastJoinTime = tick()
-end
-
--- ==============================
--- GET SERVER MOB (FILTER SESSION)
--- ==============================
-local function get_server_mob()
-    local serverFolder = workspace:FindFirstChild("Worlds")
-    if not serverFolder then return nil end
-    
-    serverFolder = serverFolder:FindFirstChild("Targets")
-    if not serverFolder then return nil end
-    
-    serverFolder = serverFolder:FindFirstChild("Server")
-    if not serverFolder then return nil end
-
-    for _, mob in pairs(serverFolder:GetChildren()) do
-        local session = mob:GetAttribute("SessionId")
-        
-        if session and string.find(session, player.Name) then
-            return mob
-        end
-    end
-    
-    return nil
-end
-
-local function press_E()
+--//====================================================--
+--// UTILS
+--//====================================================--
+local function pressE()
     VirtualInputManager:SendKeyEvent(true, "E", false, game)
     task.wait(0.1)
     VirtualInputManager:SendKeyEvent(false, "E", false, game)
 end
 
-local function claim_and_exit()
-    local raidObj = nil
-for _, child in pairs(RaidsVisual:GetChildren()) do
-    if string.find(child.Name, select_map .. "_Server_" .. player.Name) then
-        raidObj = child
-        break
-    end
+local function getParty()
+    local parties = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Parties")
+    repeat task.wait() until parties:FindFirstChild(player.Name)
+    return parties[player.Name]
 end
+
+--//====================================================--
+--// RAID LOGIC
+--//====================================================--
+local function getServerMob()
+    local folder = workspace:FindFirstChild("Worlds")
+    if not folder then return nil end
+
+    folder = folder:FindFirstChild("Targets")
+    if not folder then return nil end
+
+    folder = folder:FindFirstChild("Server")
+    if not folder then return nil end
+
+    for _, mob in pairs(folder:GetChildren()) do
+        local session = mob:GetAttribute("SessionId")
+        if session and string.find(session, player.Name) then
+            return mob
+        end
+    end
+
+    return nil
+end
+
+local function autoStartRaid()
+    if tick() - State.LastJoinTime < Config.JoinCooldown then
+        return
+    end
+
+    local character = player.Character or player.CharacterAdded:Wait()
+    local hrp = character:WaitForChild("HumanoidRootPart")
+
+    hrp.CFrame = workspace:WaitForChild("Raids_Entering")
+        :WaitForChild("Pod_03"):GetPivot()
+
+    task.wait(1.5)
+
+    local party = getParty()
+    if not party then return end
+
+    ReplicatedStorage.Remotes.Gameplays.RaidsLobbies:FireServer(
+        party,
+        "Worlds_" .. Config.RaidMap
+    )
+
+    task.wait(0.5)
+
+    ReplicatedStorage.Remotes.Gameplays.RaidsLobbies:FireServer(
+        party,
+        "Diffculty_" .. Config.RaidDifficulty
+    )
+
+    task.wait(0.5)
+
+    ReplicatedStorage.Remotes.Systems.RaidsEvent:FireServer(
+        Config.RaidMap,
+        Config.RaidDifficulty
+    )
+
+    State.LastJoinTime = tick()
+end
+
+local function claimAndExit()
+    local raidObj
+
+    for _, child in pairs(RaidsVisual:GetChildren()) do
+        if string.find(child.Name, Config.RaidMap .. "_Server_" .. player.Name) then
+            raidObj = child
+            break
+        end
+    end
+
     if not raidObj then return end
 
     local character = player.Character or player.CharacterAdded:Wait()
@@ -134,199 +137,184 @@ end
     local rewards = raidObj.Configs.Others.Rewards
     local portal = raidObj.Configs.Others.Portal.Travel
 
-    -- Special
     if rewards:FindFirstChild("Special") then
         hrp.CFrame = rewards.Special:GetPivot()
-        task.wait(0.5)
-        press_E()
-        task.wait(0.5)
+        task.wait(1)
+        pressE()
+        task.wait(1)
     end
 
-    -- Gold
     if rewards:FindFirstChild("Golds") then
         hrp.CFrame = rewards.Golds:GetPivot()
-        task.wait(0.5)
-        press_E()
-        task.wait(0.5)
+        task.wait(1)
+        pressE()
+        task.wait(1)
     end
 
-    -- Exit Portal
     if portal then
         hrp.CFrame = portal:GetPivot()
         task.wait(0.5)
-        press_E()
+        pressE()
     end
 end
 
-
--- ==============================
--- CLEAR RAID
--- ==============================
-local function clear_raid()
+local function clearRaid()
     local character = player.Character or player.CharacterAdded:Wait()
     local hrp = character:WaitForChild("HumanoidRootPart")
 
-    while inRaid and autoraid do
-        
-        local mob = get_server_mob()
-        
-        if not mob then
-            task.wait(1)
-            claim_and_exit()
-            break
+    local timeout = 0
+    local mob
+
+    repeat
+        task.wait(0.5)
+        mob = getServerMob()
+        timeout += 0.5
+
+        if timeout > 10 then
+            State.InRaid = false
+            return
         end
+    until mob
 
+    State.InRaid = true
+
+    while mob and mob.Parent and State.AutoRaid do
         hrp.CFrame = mob:GetPivot()
-       -- task.wait(0.2)
-       -- ReplicatedStorage.Remotes.Gameplays.Request:FireServer(mob.Name,"Mouse")
-
-       local timeout = 0
-while mob and mob.Parent and autoraid do
-    task.wait(0.01)
-    timeout += 0.05
-    if timeout > 60 then
-        break
+        task.wait(0.01)
+        mob = getServerMob()
     end
-end
+
+    if State.AutoRaid then
+        task.wait(1)
+        claimAndExit()
+        State.InRaid = false
     end
 end
 
+local function autoRaidLoop()
+    if State.RaidLoopRunning then return end
+    State.RaidLoopRunning = true
 
-function auto_raid_loop()
-  while autoraid do
-    if inRaid then
-        clear_raid()
-    else
-        auto_start_raid()
+    while State.AutoRaid do
+        if State.InRaid then
+            clearRaid()
+        else
+            autoStartRaid()
+        end
+        task.wait(1)
     end
-    task.wait(1)
-  end
+
+    State.RaidLoopRunning = false
 end
 
+--//====================================================--
+--// HATCH LOGIC
+--//====================================================--
+local function autoHatch()
+    if State.HatchLoopRunning then return end
+    State.HatchLoopRunning = true
 
--- ==============================
--- Hatch
--- ==============================
-select_hatch_map = "Namex Planet"
-autohatch = false
+    while State.AutoHatch do
+        ReplicatedStorage.Remotes.Summoners.RemoteEvent:FireServer(
+            workspace:WaitForChild("Summoners"):WaitForChild(Config.HatchMap),
+            "Multi"
+        )
+        task.wait(0.1)
+    end
 
-function auto_hatch()
-	while autohatch do 
-		local args = {
-	        workspace:WaitForChild("Summoners"):WaitForChild(select_hatch_map),
-	        "Multi"
-}
-   		ReplicatedStorage.Remotes.Summoners.RemoteEvent:FireServer(unpack(args))
-	task.wait(0.1)
-   end
+    State.HatchLoopRunning = false
 end
 
--- ==============================
--- UI
--- ==============================
-
+--//====================================================--
+--// UI
+--//====================================================--
 local Window = Library:MakeWindow({
-	Title = "Aqua Hub: Anime Card Realm",
-	SubTitle = "by aquane1075",
-	ScriptFolder = "AquaHubConfigs",
+    Title = "Aqua Hub: Anime Card Realm",
+    SubTitle = "by aquane1075",
+    ScriptFolder = "AquaHubConfigs",
 })
-
-local Minimizer = Window:NewMinimizer({
-	KeyCode = Enum.KeyCode.LeftControl,
-})
-
-Minimizer:CreateMobileMinimizer({
-	Image = "rbxassetid://114289527320220",
-	BackgroundColor3 = Color3.fromRGB(32, 96, 169),
-})
-
 
 local Challenge = Window:MakeTab({ "Challenge", "sword" })
 Challenge:AddSection("Raid")
+
 Challenge:AddDropdown({
-	Name = "Select Raid Map",
-	Options = {"Namex Planet","Colosseum Kingdom", "Demon Forest", "Dungeons Town"},
-	Default = select_map,
-	Flag = "Raid_Map",
-	Callback = function(value)
-		select_map = value
-	end,
+    Name = "Select Raid Map",
+    Options = {"Namex Planet","Colosseum Kingdom","Demon Forest","Dungeons Town"},
+    Default = Config.RaidMap,
+    Flag = "Raid_Map",
+    Callback = function(v)
+        Config.RaidMap = v
+    end,
 })
 
 Challenge:AddDropdown({
-	Name = "Select Raid Difficulty",
-	Options = {"Easy", "Medium", "Hard", "Nightmare"},
-	Default = select_difficulty,
-	Flag = "Raid_Difficulty",
-	Callback = function(value)
-		select_difficulty = value
-	end,
+    Name = "Select Raid Difficulty",
+    Options = {"Easy","Medium","Hard","Nightmare"},
+    Default = Config.RaidDifficulty,
+    Flag = "Raid_Difficulty",
+    Callback = function(v)
+        Config.RaidDifficulty = v
+    end,
 })
 
 Challenge:AddToggle({
-	Name = "Auto Raid",
-	Default = false,
-	Flag = "Auto_Raid",
-	Callback = function(value)
-		autoraid = value
-		if autoraid then
-			auto_raid_loop()
-		end
+    Name = "Auto Raid",
+    Default = false,
+    Flag = "Auto_Raid",
+    Callback = function(v)
+        State.AutoRaid = v
+        if v then autoRaidLoop() end
     end,
 })
 
 local Hatch = Window:MakeTab({ "Hatch", "egg" })
+
 Hatch:AddDropdown({
-	Name = "Select Hatch Map",
-	Options = {"Namex Planet","Colosseum Kingdom", "Demon Forest", "Dungeons Town"},
-	Default = select_hatch_map,
-	Flag = "Hatch_Map",
-	Callback = function(value)
-		select_hatch_map = value
-	end,
+    Name = "Select Hatch Map",
+    Options = {"Namex Planet","Colosseum Kingdom","Demon Forest","Dungeons Town"},
+    Default = Config.HatchMap,
+    Flag = "Hatch_Map",
+    Callback = function(v)
+        Config.HatchMap = v
+    end,
 })
 
 Hatch:AddToggle({
-	Name = "Auto Hatch",
-	Default = false,
-	Flag = "Auto_Hatch",
-	Callback = function(value)
-		autohatch = value
-		if autohatch then
-			auto_hatch()
-		end
-	end,
+    Name = "Auto Hatch",
+    Default = false,
+    Flag = "Auto_Hatch",
+    Callback = function(v)
+        State.AutoHatch = v
+        if v then autoHatch() end
+    end,
 })
 
 local UI = Window:MakeTab({ "Ui", "sword" })
+
+local function toggleGui(name, value)
+    local gui = player.PlayerGui:FindFirstChild(name)
+    if gui then
+        gui.Enabled = value
+    end
+end
+
 UI:AddToggle({
-	Name = "Open Trait Ui",
-	Default = false,
-	Callback = function(value)
-		local traitsGui = player.PlayerGui:FindFirstChild("Traits")
-		if traitsGui then
-			traitsGui.Enabled = value
-		end
-	end,
-})
-UI:AddToggle({
-	Name = "Open Vending Machine Ui",
-	Default = false,
-	Callback = function(value)
-		local vendingGui = player.PlayerGui.SpinWheels
-		if vendingGui then
-			vendingGui.Enabled = value
-		end
-	end,
+    Name = "Open Trait Ui",
+    Callback = function(v)
+        toggleGui("Traits", v)
+    end,
 })
 
 UI:AddToggle({
-	Name = "Open Talent Ui",
-	Default = false,
-	Callback = function(value)
-		local talentGui = player.PlayerGui:FindFirstChild("Talents")
-		if talentGui then
-			talentGui.Enabled = value
-		end
-	end,
+    Name = "Open Vending Machine Ui",
+    Callback = function(v)
+        toggleGui("SpinWheels", v)
+    end,
+})
+
+UI:AddToggle({
+    Name = "Open Talent Ui",
+    Callback = function(v)
+        toggleGui("Talents", v)
+    end,
 })
