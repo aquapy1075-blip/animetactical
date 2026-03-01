@@ -309,3 +309,24 @@ UI:AddToggle({
 		end
 	end,
 })
+UI:AddToggle({
+	Name = "Open Vending Machine Ui",
+	Default = false,
+	Callback = function(value)
+		local vendingGui = player.PlayerGui.SpinWheels
+		if vendingGui then
+			vendingGui.Enabled = value
+		end
+	end,
+})
+
+UI:AddToggle({
+	Name = "Open Talent Ui",
+	Default = false,
+	Callback = function(value)
+		local talentGui = player.PlayerGui:FindFirstChild("Talents")
+		if talentGui then
+			talentGui.Enabled = value
+		end
+	end,
+})
