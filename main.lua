@@ -297,3 +297,15 @@ Hatch:AddToggle({
 		end
 	end,
 })
+
+local UI = Window:MakeTab({ "Ui", "sword" })
+UI:AddButton({
+	Name = "Open Trait Ui",
+	Default = false,
+	Callback = function(value)
+		local traitsGui = player.PlayerGui:FindFirstChild("Traits")
+		if traitsGui then
+			traitsGui.Enabled = value
+		end
+	end,
+})
