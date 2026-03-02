@@ -350,11 +350,16 @@ function auto_boss()
                 local firstBoss = bosses[1]
                 local character = player.Character
                    or player.CharacterAdded:Wait()
+                local args = {
+	                 buffer.fromstring("\005\f\000Demon Forest")
+                 }
+               ReplicatedStorage.ByteNetReliable:FireServer(unpack(args))
+               task.wait(0.5)
 
                 local hrp = character:WaitForChild("HumanoidRootPart")
                 local portal = workspace.Maps["Demon Forest"].Building.Portals
                 hrp.CFrame = portal:GetPivot()
-                task.wait(1)
+                task.wait(3)
                 if firstBoss:IsA("Model") then
                     hrp.CFrame = firstBoss:GetPivot() * CFrame.new(0,0,-5)
                 elseif firstBoss:IsA("BasePart") then
