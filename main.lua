@@ -18,7 +18,7 @@
     local partyMode = "Solo" -- "Solo", "Join", "Host"
     local hostPlayerName = "" -- dùng khi Join mode
     local requiredOtherPlayers = 1
-    local bossActive = false
+
     -- ==============================
     -- RAID STATE CHECK
     -- ==============================
@@ -56,7 +56,6 @@ end
     -- START RAID
     -- ==============================
    local function auto_start_raid()
-    if bossActive then return end
     local character = player.Character or player.CharacterAdded:Wait()
     local hrp = character:WaitForChild("HumanoidRootPart")
 
@@ -67,26 +66,10 @@ end
         local parties = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Parties")
 
         while autoraid and not parties:FindFirstChild(hostPlayerName) do
-             if bossActive then
-              return
-             end
             task.wait(0.5)
         end
-        if select_map == "Double Dungeons" then
-        -- Map này cần fire riêng
-        ReplicatedStorage.ByteNetReliable:FireServer(
-            buffer.fromstring("\005\r\000Dungeons Town")
-        )
 
-        task.wait(1.5)
-        hrp.CFrame = CFrame.new(-3025, 1040, -1859)
-        task.wait(1.5)
-    else
-        local pod = workspace:WaitForChild("Raids_Entering"):WaitForChild("Pod_03")
-        hrp.CFrame = pod:GetPivot()
-        task.wait(1.5)
-    end
-        return 
+        if not autoraid then return end
     end
 
     -- ===== TELEPORT LOGIC =====
@@ -104,14 +87,14 @@ end
         hrp.CFrame = pod:GetPivot()
         task.wait(1.5)
     end
-    if bossActive then return end
+
     -- ===== PARTY CHECK =====
     local partyFolder = get_party()
 
     if not partyFolder and partyMode ~= "Solo" then
         return
     end
-     if bossActive then return end
+
     -- ===== SELECT MAP =====
     ReplicatedStorage.Remotes.Gameplays.RaidsLobbies:FireServer(
         partyFolder,
@@ -133,13 +116,12 @@ end
         local startWait = tick()
         local WAIT_TIMEOUT = 60
 
-      repeat
-    task.wait(1)
-until party_has_required_members()
-    or tick() - startWait > WAIT_TIMEOUT
-    or bossActive
+        repeat
+            task.wait(1)
+        until party_has_required_members()
+            or tick() - startWait > WAIT_TIMEOUT
 
-        if not party_has_required_members() or bossActive then
+        if not party_has_required_members() then
             return
         end
     end
@@ -155,7 +137,6 @@ end
     -- GET SERVER MOB
     -- ==============================
     local function get_server_mob()
-        if bossActive then return nil end
        local serverFolder = workspace.Worlds.Targets.Server
       
        for _, mob in pairs(serverFolder:GetChildren()) do
@@ -262,9 +243,6 @@ end
         if not mob then return end
 
         while mob and mob.Parent and autoraid do
-            if bossActive then
-             return
-            end
             hrp.CFrame = mob:GetPivot()
             task.wait(0.01)
             mob = get_server_mob()
@@ -286,19 +264,12 @@ end
         if loop_running then return end
         loop_running = true
     while autoraid do
-             if bossActive then
-               task.wait(0.5)
-               continue
-             end
             if not raidBusy then
                 raidBusy = true
                 if not is_in_raid() then auto_start_raid() end
                 repeat task.wait()
-               until is_in_raid() or bossActive or not autoraid
-                
-                 if bossActive or not autoraid then
-                   continue
-                 end
+                until is_in_raid()
+                task.wait()
                 clear_raid()
                 task.wait(1)
                 raidBusy = false
@@ -314,7 +285,7 @@ end
     local automain = false
     local select_world_main = "Namex Planet"
     local autoboss = false
- 
+    local bossActive = false
 
     local MobByMap = {
     ["Namex Planet"] = {"Yumcha","Vejita","Goku","Broly","Buu"},
@@ -403,11 +374,7 @@ function auto_boss()
                     table.insert(bosses, obj)
                 end
             end
-           if #bosses > 0 then
-              bossActive = true
-           else
-              bossActive = false
-           end
+            bossActive = (#bosses > 0)
             if bossActive then
                 task.wait(5)
                 local firstBoss = bosses[1]
@@ -432,7 +399,6 @@ function auto_boss()
                 repeat
                     task.wait(0.5)
                 until not firstBoss or not firstBoss.Parent or not autoboss
-                bossActive = false
             end
 
         task.wait(1)
@@ -633,4 +599,3 @@ Farm:AddDropdown({
             end
         end,
     })
-
