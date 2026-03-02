@@ -4,9 +4,7 @@
     local Players = game:GetService("Players")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local VirtualInputManager = game:GetService("VirtualInputManager")
-
     local player = Players.LocalPlayer
-
     local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/tlredz/Library/refs/heads/main/redz-V5-remake/main.luau"))()
 
     -- ==============================
@@ -42,7 +40,7 @@ end
     -- ==============================
     -- GET PARTY
     -- ==============================
-    local function get_party()
+local function get_party()
         local parties = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Parties")
         repeat task.wait() until parties:FindFirstChild(player.Name)
         return parties[player.Name]
@@ -52,16 +50,7 @@ local function party_has_required_members()
     local myParty = parties:FindFirstChild(player.Name)
     if not myParty then return false end
 
-    local count = 0
-
-    for _, member in pairs(myParty:GetChildren()) do
-        -- bỏ qua owner
-        if not string.find(string.lower(member.Name), "Owners") then
-            count += 1
-        end
-    end
-
-    return count >= requiredOtherPlayers
+    return (#myParty:GetChildren() - 1) >= requiredOtherPlayers
 end
     -- ==============================
     -- START RAID
@@ -70,31 +59,29 @@ end
         local character = player.Character or player.CharacterAdded:Wait()
         local hrp = character:WaitForChild("HumanoidRootPart")
         if partyMode == "Join" then
-            if hostPlayerName == "" then return end
+             if hostPlayerName == "" then return end
 
            local parties = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Parties")
-
-    -- chờ tới khi host tạo party hoặc tắt autoraid
            while autoraid and not parties:FindFirstChild(hostPlayerName) do
                  task.wait(0.5)
            end
 
              if not autoraid then return end
 
-    -- host đã tạo party -> teleport
          local pod = workspace:WaitForChild("Raids_Entering"):WaitForChild("Pod_03")
          hrp.CFrame = pod:GetPivot()
          task.wait(1.5)
          return
     end
 
-        
-
+    
         local pod = workspace:WaitForChild("Raids_Entering"):WaitForChild("Pod_03")
         hrp.CFrame = pod:GetPivot()
-
-        local partyFolder = get_party()
-        if not partyFolder then return end
+        task.wait(1.5)
+       local partyFolder = get_party()
+       if not partyFolder and partyMode ~= "Solo" then
+            return
+       end
 
         ReplicatedStorage.Remotes.Gameplays.RaidsLobbies:FireServer(
             partyFolder,
@@ -122,10 +109,7 @@ end
         end
 end
 
-        ReplicatedStorage.Remotes.Systems.RaidsEvent:FireServer(
-            select_map,
-            select_difficulty
-        )
+        ReplicatedStorage.Remotes.Systems.RaidsEvent:FireServer(select_map,select_difficulty)
     end
 
     -- ==============================
@@ -167,6 +151,7 @@ end
         task.wait(0.1)
         VirtualInputManager:SendKeyEvent(false, "E", false, game)
     end
+
 
     -- ==============================
     -- CLAIM + EXIT
@@ -268,15 +253,9 @@ end
             if not raidBusy then
                 raidBusy = true
                 if not is_in_raid() then auto_start_raid() end
-                local startTime = tick()
-                local JOIN_TIMEOUT = 10
                 repeat task.wait()
-                until is_in_raid() or tick() - startTime > JOIN_TIMEOUT
-                if not is_in_raid() then
-                        raidBusy = false
-                            task.wait(2)
-                           continue
-                end
+                until is_in_raid()
+                task.wait()
                 clear_raid()
                 task.wait(1)
                 raidBusy = false
@@ -284,56 +263,111 @@ end
 
             task.wait(1)
         end
-
-
         loop_running = false
     end
     -- ==============================
     -- Main World
     -- ==============================
     local automain = false
-    local select_npc_main = "Players"
     local select_world_main = "Namex Planet"
+    local autoboss = false
+    local MobByMap = {
+    ["Namex Planet"] = {"Yumcha","Vejita","Goku","Broly","Buu"},
+    ["Colosseum Kingdom"] = {"Joker","Zoro","Buggy","Ace","Luffy"},
+    ["Demon Forest"] = {"Murata","Genya","Tanjiro","Zetnitsu","Giyu","Gyutaro"},
+    ["Dungeons Town"] = {"Jinho","Bora-Lee","Iron","Heejin","Sung Jin Woo"},
+}
 
-function findUnitByName(targetText)
-    local server = workspace.Worlds.Targets.Server
-    for _, unit in ipairs(server:GetChildren()) do
-            local unitsDisplay = unit:FindFirstChild("Units_Displays")
-            if unitsDisplay then
-                local name = unitsDisplay:FindFirstChild("Names")
-                if name and name.Text == targetText then
-                    return unit.Name
-                end
-            end
-    end
-
-    return nil
-end
-    function auto_main_world()
-        while automain do
-           local maps = workspace:WaitForChild("Maps")
-           if maps:FindFirstChild(select_world_main) == nil then 
-              local stringname = "\004\r\000" .. select_world_main
-              local args = {
-	             buffer.fromstring(stringname)
-              }
-              ReplicatedStorage.ByteNetReliable:FireServer(unpack(args))
-              task.wait(1.5)
-            end
-            task.wait(0.5)
-         local dps =  player.PlayerGui.HUD._Frame.DPS.Numbers
-           if dps.Text == "0" then
-                local target = findUnitByName(select_npc_main)
-                if target then 
-                    local args = { target,  "Mouse"}
-                     ReplicatedStorage.Remotes.Gameplays.Request:FireServer(unpack(args))
-                end
-
-           end
-            task.wait(1.5)
+local selectedMobs = {} -- lưu mob được chọn
+local function isTargetUnit(unitName)
+    for _, name in ipairs(selectedMobs) do
+        if unitName == name then
+            return true
         end
     end
+    return false
+end
 
+function auto_main_world()
+    while automain do
+        
+local server = workspace:FindFirstChild("Worlds")
+    and workspace.Worlds:FindFirstChild("Targets")
+    and workspace.Worlds.Targets:FindFirstChild("Server")
+
+if not server then task.wait(1) continue end
+
+        for _, mob in pairs(server:GetChildren()) do
+            if not automain then break end
+
+            local humanoid = mob:FindFirstChildOfClass("Humanoid")
+            if humanoid then
+
+                local mobName = humanoid.DisplayName
+
+                if isTargetUnit(mobName) then
+
+                    -- Tele tới mob
+                    local character = player.Character
+                    if character and character:FindFirstChild("HumanoidRootPart") then
+                        local hrp = character.HumanoidRootPart
+                        hrp.CFrame = mob:GetPivot() * CFrame.new(0, 0, -5)
+                        task.wait(0.5)
+                    end
+
+                    -- Attack
+                    ReplicatedStorage.Remotes.Gameplays.Request:FireServer(mob.Name, "Mouse")
+
+                    -- chờ mob chết
+                    repeat
+                        task.wait(0.2)
+                    until not mob or not mob.Parent
+                end
+            end
+        end
+
+        task.wait(0.3)
+    end
+end
+function auto_boss()
+    while autoboss do
+        
+        local server = workspace:FindFirstChild("Worlds")
+            and workspace.Worlds:FindFirstChild("Targets")
+            and workspace.Worlds.Targets:FindFirstChild("Server")
+
+        if server then
+            
+            local bosses = {}
+
+            for _, obj in pairs(server:GetChildren()) do
+                if string.find(obj.Name, "BossFight") then
+                    table.insert(bosses, obj)
+                end
+            end
+
+            if #bosses > 0 then
+                local firstBoss = bosses[1]
+                local character = player.Character
+                   or player.CharacterAdded:Wait()
+
+                local hrp = character:WaitForChild("HumanoidRootPart")
+
+                if firstBoss:IsA("Model") then
+                    hrp.CFrame = firstBoss:GetPivot() * CFrame.new(0,0,-5)
+                elseif firstBoss:IsA("BasePart") then
+                    hrp.CFrame = firstBoss.CFrame * CFrame.new(0,0,-5)
+                end
+
+                repeat
+                    task.wait(0.5)
+                until not firstBoss or not firstBoss.Parent or not autoboss
+            end
+        end
+
+        task.wait(1)
+    end
+end
     -- ==============================
     -- HATCH
     -- ==============================
@@ -452,28 +486,41 @@ Challenge:AddTextBox({
     })
 
     local Farm = Window:MakeTab({ "Farm", "pickaxe" })
-       Farm:AddDropdown({
-        Name = "Select Farm Map",
-        Options = {"Namex Planet","Colosseum Kingdom","Demon Forest","Dungeons Town"},
-        Default = select_world_main,
-        Flag = "Farm_Map",
-        Callback = function(value)
-            select_world_main = value
-        end,
-    })
-       Farm:AddTextBox({
-        Name = "Select NPC",
-        Default = select_npc_main,
-        Flag = "Farm_NPC",
-        ClearOnFocus = true,
-        Callback = function(value)
-            select_npc_main = value
-        end,
-       })
+       
+local mobDropdown
+
+mobDropdown = Farm:AddDropdown({
+    Name = "Select Mob",
+    MultiSelect = true,
+    Options = MobByMap[select_world_main],
+    Default = {},
+    Callback = function(Value)
+        selectedMobs = {}
+        for mobName, state in pairs(Value) do
+            if state then
+                table.insert(selectedMobs, mobName)
+            end
+        end
+    end
+})
+Farm:AddDropdown({
+    Name = "Select Farm Map",
+    Options = {"Namex Planet","Colosseum Kingdom","Demon Forest","Dungeons Town"},
+    Default = select_world_main,
+    Flag = "Farm_Map",
+    Callback = function(value)
+        select_world_main = value
+        
+        if mobDropdown then
+            selectedMobs = {}
+            mobDropdown:NewOptions(MobByMap[value])
+        end
+    end,
+})
        Farm:AddToggle({
-        Name = "Auto Farm Main World",
+        Name = "Auto Farm Mob",
         Default = false,
-        Flag = "Auto_Farm_Main",
+        Flag = "Auto_Farm_Mob",
         Callback = function(value)
             automain = value
             if automain then
@@ -481,6 +528,16 @@ Challenge:AddTextBox({
             end
         end,
     })
+    Farm:AddToggle({
+    Name = "Auto Boss",
+    Default = false,
+    Callback = function(value)
+        autoboss = value
+        if autoboss then
+            task.spawn(auto_boss)
+        end
+    end,
+})
     local Hatch = Window:MakeTab({ "Hatch", "egg" })
 
     Hatch:AddDropdown({
