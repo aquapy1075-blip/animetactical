@@ -352,7 +352,9 @@ function auto_boss()
                    or player.CharacterAdded:Wait()
 
                 local hrp = character:WaitForChild("HumanoidRootPart")
-
+                local portal = workspace.Maps["Demon Forest"].Building.Portals
+                hrp.CFrame = portal:GetPivot()
+                task.wait(1)
                 if firstBoss:IsA("Model") then
                     hrp.CFrame = firstBoss:GetPivot() * CFrame.new(0,0,-5)
                 elseif firstBoss:IsA("BasePart") then
