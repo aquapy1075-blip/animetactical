@@ -47,7 +47,7 @@ end
         repeat task.wait() until parties:FindFirstChild(player.Name)
         return parties[player.Name]
     end
-    local function party_has_required_members()
+local function party_has_required_members()
     local parties = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Parties")
     local myParty = parties:FindFirstChild(player.Name)
     if not myParty then return false end
@@ -55,7 +55,8 @@ end
     local count = 0
 
     for _, member in pairs(myParty:GetChildren()) do
-        if member.Name ~= player.Name then
+        -- bỏ qua owner
+        if not string.find(string.lower(member.Name), "Owners") then
             count += 1
         end
     end
