@@ -55,77 +55,91 @@ end
     -- ==============================
     -- START RAID
     -- ==============================
-    local function auto_start_raid()
-        local character = player.Character or player.CharacterAdded:Wait()
-        local hrp = character:WaitForChild("HumanoidRootPart")
-        if partyMode == "Join" then
-             if hostPlayerName == "" then return end
+   local function auto_start_raid()
+    local character = player.Character or player.CharacterAdded:Wait()
+    local hrp = character:WaitForChild("HumanoidRootPart")
 
-           local parties = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Parties")
-           while autoraid and not parties:FindFirstChild(hostPlayerName) do
-                 task.wait(0.5)
-           end
+    -- ===== JOIN MODE =====
+    if partyMode == "Join" then
+        if hostPlayerName == "" then return end
 
-             if not autoraid then return end
+        local parties = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Parties")
 
-         local pod = workspace:WaitForChild("Raids_Entering"):WaitForChild("Pod_03")
-         hrp.CFrame = pod:GetPivot()
-         task.wait(1.5)
-         return
+        while autoraid and not parties:FindFirstChild(hostPlayerName) do
+            task.wait(0.5)
+        end
+
+        if not autoraid then return end
     end
 
-    
+    -- ===== TELEPORT LOGIC =====
+    if select_map == "Double Dungeons" then
+        -- Map này cần fire riêng
+        ReplicatedStorage.ByteNetReliable:FireServer(
+            buffer.fromstring("\005\r\000Dungeons Town")
+        )
+
+        task.wait(1.5)
+        hrp.CFrame = CFrame.new(-3025, 1040, -1859)
+        task.wait(1.5)
+    else
         local pod = workspace:WaitForChild("Raids_Entering"):WaitForChild("Pod_03")
         hrp.CFrame = pod:GetPivot()
         task.wait(1.5)
-       local partyFolder = get_party()
-       if not partyFolder and partyMode ~= "Solo" then
-            return
-       end
+    end
 
-        ReplicatedStorage.Remotes.Gameplays.RaidsLobbies:FireServer(
-            partyFolder,
-            "Worlds_" .. select_map
-        )
+    -- ===== PARTY CHECK =====
+    local partyFolder = get_party()
 
-        task.wait(0.5)
+    if not partyFolder and partyMode ~= "Solo" then
+        return
+    end
 
-        ReplicatedStorage.Remotes.Gameplays.RaidsLobbies:FireServer(
-            partyFolder,
-            "Diffculty_" .. select_difficulty
-        )
+    -- ===== SELECT MAP =====
+    ReplicatedStorage.Remotes.Gameplays.RaidsLobbies:FireServer(
+        partyFolder,
+        "Worlds_" .. select_map
+    )
 
-        task.wait(0.5)
-        if partyMode == "Host" then
-            local startWait = tick()
-            local WAIT_TIMEOUT = 60
+    task.wait(0.5)
 
-         repeat
-        task.wait(1)
-           until party_has_required_members() or tick() - startWait > WAIT_TIMEOUT
+    -- ===== SELECT DIFFICULTY =====
+    ReplicatedStorage.Remotes.Gameplays.RaidsLobbies:FireServer(
+        partyFolder,
+        "Diffculty_" .. select_difficulty
+    )
+
+    task.wait(0.5)
+
+    -- ===== HOST WAIT FOR MEMBERS =====
+    if partyMode == "Host" then
+        local startWait = tick()
+        local WAIT_TIMEOUT = 60
+
+        repeat
+            task.wait(1)
+        until party_has_required_members()
+            or tick() - startWait > WAIT_TIMEOUT
 
         if not party_has_required_members() then
-           return -- chưa đủ người
+            return
         end
-end
-
-        ReplicatedStorage.Remotes.Systems.RaidsEvent:FireServer(select_map,select_difficulty)
     end
+
+    -- ===== START RAID =====
+    ReplicatedStorage.Remotes.Systems.RaidsEvent:FireServer(
+        select_map,
+        select_difficulty
+    )
+end
 
     -- ==============================
     -- GET SERVER MOB
     -- ==============================
     local function get_server_mob()
-        local serverFolder = workspace:FindFirstChild("Worlds")
-        if not serverFolder then return nil end
-
-        serverFolder = serverFolder:FindFirstChild("Targets")
-        if not serverFolder then return nil end
-
-        serverFolder = serverFolder:FindFirstChild("Server")
-        if not serverFolder then return nil end
-
-      for _, mob in pairs(serverFolder:GetChildren()) do
+       local serverFolder = workspace.Worlds.Targets.Server
+      
+       for _, mob in pairs(serverFolder:GetChildren()) do
         local session = mob:GetAttribute("SessionId")
         if session then
             if partyMode == "Join" then
@@ -143,7 +157,7 @@ end
         return nil
     end
 
-    -- ==============================
+    -- ==============================   
     -- INPUT
     -- ==============================
     local function press_E()
@@ -271,6 +285,8 @@ end
     local automain = false
     local select_world_main = "Namex Planet"
     local autoboss = false
+    local bossActive = false
+
     local MobByMap = {
     ["Namex Planet"] = {"Yumcha","Vejita","Goku","Broly","Buu"},
     ["Colosseum Kingdom"] = {"Joker","Zoro","Buggy","Ace","Luffy"},
@@ -290,6 +306,21 @@ end
 
 function auto_main_world()
     while automain do
+
+         if bossActive then
+            task.wait(0.5)
+            continue
+        end
+
+ local maps = workspace:WaitForChild("Maps")
+ if maps:FindFirstChild(select_world_main) == nil then 
+              local stringname = "\004\r\000" .. select_world_main
+              local args = {
+	             buffer.fromstring(stringname)
+              }
+              ReplicatedStorage.ByteNetReliable:FireServer(unpack(args))
+              task.wait(1.5)
+ end
         
 local server = workspace:FindFirstChild("Worlds")
     and workspace.Worlds:FindFirstChild("Targets")
@@ -298,7 +329,7 @@ local server = workspace:FindFirstChild("Worlds")
 if not server then task.wait(1) continue end
 
         for _, mob in pairs(server:GetChildren()) do
-            if not automain then break end
+            if not automain or bossActive then break end
 
             local humanoid = mob:FindFirstChildOfClass("Humanoid")
             if humanoid then
@@ -321,7 +352,7 @@ if not server then task.wait(1) continue end
                     -- chờ mob chết
                     repeat
                         task.wait(0.2)
-                    until not mob or not mob.Parent
+                    until not mob or not mob.Parent or bossActive
                 end
             end
         end
@@ -336,17 +367,16 @@ function auto_boss()
             and workspace.Worlds:FindFirstChild("Targets")
             and workspace.Worlds.Targets:FindFirstChild("Server")
 
-        if server then
-            
+    
             local bosses = {}
-
             for _, obj in pairs(server:GetChildren()) do
                 if string.find(obj.Name, "BossFight") then
                     table.insert(bosses, obj)
                 end
             end
-
-            if #bosses > 0 then
+            bossActive = (#bosses > 0)
+            if bossActive then
+                task.wait(5)
                 local firstBoss = bosses[1]
                 local character = player.Character
                    or player.CharacterAdded:Wait()
@@ -370,7 +400,6 @@ function auto_boss()
                     task.wait(0.5)
                 until not firstBoss or not firstBoss.Parent or not autoboss
             end
-        end
 
         task.wait(1)
     end
@@ -393,7 +422,7 @@ end
             }
 
             ReplicatedStorage.Remotes.Summoners.RemoteEvent:FireServer(unpack(args))
-            task.wait(0.1)
+            task.wait(0.125)
         end
 
         hatch_loop_running = false
@@ -426,7 +455,7 @@ end
 
     Challenge:AddDropdown({
         Name = "Select Raid Map",
-        Options = {"Namex Planet","Colosseum Kingdom","Demon Forest","Dungeons Town"},
+        Options = {"Namex Planet","Colosseum Kingdom","Demon Forest","Dungeons Town", "Double Dungeons"},
         Default = select_map,
         Flag = "Raid_Map",
         Callback = function(value)
@@ -456,8 +485,9 @@ end
     Name = "Party Mode",
     Options = {"Solo","Join","Host"},
     Default = "Solo",
+    Flag = "Party_Mode",
     Callback = function(value)
-        partyMode = value
+        partyMode = tostring(value)
     end,
 })
 
@@ -501,6 +531,7 @@ mobDropdown = Farm:AddDropdown({
     MultiSelect = true,
     Options = MobByMap[select_world_main],
     Default = {},
+    Flag = "Mob_Selected",
     Callback = function(Value)
         selectedMobs = {}
         for mobName, state in pairs(Value) do
