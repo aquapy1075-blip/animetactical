@@ -67,19 +67,31 @@ end
     -- START RAID
     -- ==============================
     local function auto_start_raid()
-        
-
         local character = player.Character or player.CharacterAdded:Wait()
         local hrp = character:WaitForChild("HumanoidRootPart")
+        if partyMode == "Join" then
+            if hostPlayerName == "" then return end
+
+           local parties = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Parties")
+
+    -- chờ tới khi host tạo party hoặc tắt autoraid
+           while autoraid and not parties:FindFirstChild(hostPlayerName) do
+                 task.wait(0.5)
+           end
+
+             if not autoraid then return end
+
+    -- host đã tạo party -> teleport
+         local pod = workspace:WaitForChild("Raids_Entering"):WaitForChild("Pod_03")
+         hrp.CFrame = pod:GetPivot()
+         task.wait(1.5)
+         return
+    end
+
+        
 
         local pod = workspace:WaitForChild("Raids_Entering"):WaitForChild("Pod_03")
         hrp.CFrame = pod:GetPivot()
-
-        task.wait(1.5)
-            if partyMode == "Join" then
-        -- Join mode: chỉ cần teleport vào pod
-        return
-        end
 
         local partyFolder = get_party()
         if not partyFolder then return end
@@ -159,18 +171,24 @@ end
     -- ==============================
     -- CLAIM + EXIT
     -- ==============================
-    local function claim_and_exit()
+   local function claim_and_exit()
 
-        local raidObj = nil
+    local raidObj = nil
+    local raidOwnerName = player.Name
 
-        for _, child in pairs(RaidsVisual:GetChildren()) do
-            if string.find(child.Name, select_map .. "_Server_" .. player.Name) then
-                raidObj = child
-                break
-            end
+    -- nếu Join mode thì raid theo tên host
+    if partyMode == "Join" and hostPlayerName ~= "" then
+        raidOwnerName = hostPlayerName
+    end
+
+    for _, child in pairs(RaidsVisual:GetChildren()) do
+        if string.find(child.Name, select_map .. "_Server_" .. raidOwnerName) then
+            raidObj = child
+            break
         end
+    end
 
-        if not raidObj then return end
+    if not raidObj then return end
 
         local character = player.Character or player.CharacterAdded:Wait()
         local hrp = character:WaitForChild("HumanoidRootPart")
@@ -229,6 +247,7 @@ end
             hrp.CFrame = mob:GetPivot()
             task.wait(0.01)
             mob = get_server_mob()
+            
         end
 
         if autoraid then
