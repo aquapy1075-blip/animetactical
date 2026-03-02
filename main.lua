@@ -402,7 +402,7 @@ end
         hostPlayerName = value
     end,
 })
-Challenge:AddInput({
+Challenge:AddTextBox({
     Name = "Required Other Players (Host)",
     Default = "1",
     Placeholder = "Enter number...",
