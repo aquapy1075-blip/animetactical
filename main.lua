@@ -72,8 +72,21 @@ end
              end
             task.wait(0.5)
         end
+        if select_map == "Double Dungeons" then
+        -- Map này cần fire riêng
+        ReplicatedStorage.ByteNetReliable:FireServer(
+            buffer.fromstring("\005\r\000Dungeons Town")
+        )
 
-        if not autoraid then return end
+        task.wait(1.5)
+        hrp.CFrame = CFrame.new(-3025, 1040, -1859)
+        task.wait(1.5)
+    else
+        local pod = workspace:WaitForChild("Raids_Entering"):WaitForChild("Pod_03")
+        hrp.CFrame = pod:GetPivot()
+        task.wait(1.5)
+    end
+        return 
     end
 
     -- ===== TELEPORT LOGIC =====
