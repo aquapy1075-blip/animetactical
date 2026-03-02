@@ -17,6 +17,9 @@
     local autoraid = false
     local useDungeonKey = false
     local RaidsVisual = workspace:WaitForChild("Raids_Visual")
+    local partyMode = "Solo" -- "Solo", "Join", "Host"
+    local hostPlayerName = "" -- dùng khi Join mode
+    local requiredOtherPlayers = 1
 
     -- ==============================
     -- RAID STATE CHECK
@@ -38,7 +41,21 @@
         repeat task.wait() until parties:FindFirstChild(player.Name)
         return parties[player.Name]
     end
+    local function party_has_required_members()
+    local parties = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Parties")
+    local myParty = parties:FindFirstChild(player.Name)
+    if not myParty then return false end
 
+    local count = 0
+
+    for _, member in pairs(myParty:GetChildren()) do
+        if member.Name ~= player.Name then
+            count += 1
+        end
+    end
+
+    return count >= requiredOtherPlayers
+end
     -- ==============================
     -- START RAID
     -- ==============================
@@ -52,6 +69,10 @@
         hrp.CFrame = pod:GetPivot()
 
         task.wait(1.5)
+            if partyMode == "Join" then
+        -- Join mode: chỉ cần teleport vào pod
+        return
+        end
 
         local partyFolder = get_party()
         if not partyFolder then return end
@@ -69,6 +90,18 @@
         )
 
         task.wait(0.5)
+        if partyMode == "Host" then
+            local startWait = tick()
+            local WAIT_TIMEOUT = 60
+
+         repeat
+        task.wait(1)
+           until party_has_required_members() or tick() - startWait > WAIT_TIMEOUT
+
+        if not party_has_required_members() then
+           return -- chưa đủ người
+        end
+end
 
         ReplicatedStorage.Remotes.Systems.RaidsEvent:FireServer(
             select_map,
@@ -89,12 +122,20 @@
         serverFolder = serverFolder:FindFirstChild("Server")
         if not serverFolder then return nil end
 
-        for _, mob in pairs(serverFolder:GetChildren()) do
-            local session = mob:GetAttribute("SessionId")
-            if session and string.find(session, player.Name) then
-                return mob
+      for _, mob in pairs(serverFolder:GetChildren()) do
+        local session = mob:GetAttribute("SessionId")
+        if session then
+            if partyMode == "Join" then
+                if hostPlayerName ~= "" and string.find(session, hostPlayerName) then
+                    return mob
+                end
+            else
+                if string.find(session, player.Name) then
+                    return mob
+                end
             end
         end
+    end
 
         return nil
     end
@@ -207,7 +248,8 @@
                 until is_in_raid() or tick() - startTime > JOIN_TIMEOUT
                 if not is_in_raid() then
                         raidBusy = false
-                        return -- join thất bại, thử lại vòng sau
+                            task.wait(2)
+                           continue
                 end
                 clear_raid()
                 task.wait(1)
@@ -219,6 +261,51 @@
 
 
         loop_running = false
+    end
+    -- ==============================
+    -- Main World
+    -- ==============================
+    local automain = false
+    local select_npc_main = "Players"
+    local select_world_main = "Namex Planet"
+
+function findUnitByName(targetText)
+    local server = workspace.Worlds.Targets.Server
+    for _, unit in ipairs(server:GetChildren()) do
+            local unitsDisplay = unit:FindFirstChild("Units_Displays")
+            if unitsDisplay then
+                local name = unitsDisplay:FindFirstChild("Names")
+                if name and name.Text == targetText then
+                    return unit.Name
+                end
+            end
+    end
+
+    return nil
+end
+    function auto_main_world()
+        while automain do
+           local maps = workspace:WaitForChild("Maps")
+           if maps:FindFirstChild(select_world_main) == nil then 
+              local stringname = "\004\r\000" .. select_world_main
+              local args = {
+	             buffer.fromstring(stringname)
+              }
+              ReplicatedStorage.ByteNetReliable:FireServer(unpack(args))
+              task.wait(1.5)
+            end
+            task.wait(0.5)
+         local dps =  player.PlayerGui.HUD._Frame.DPS.Numbers
+           if dps.Text == "0" then
+                local target = findUnitByName(select_npc_main)
+                if target then 
+                    local args = { target,  "Mouse"}
+                     ReplicatedStorage.Remotes.Gameplays.Request:FireServer(unpack(args))
+                end
+
+           end
+            task.wait(1.5)
+        end
     end
 
     -- ==============================
@@ -297,6 +384,35 @@
             useDungeonKey = value
         end,
     })
+
+    Challenge:AddDropdown({
+    Name = "Party Mode",
+    Options = {"Solo","Join","Host"},
+    Default = "Solo",
+    Callback = function(value)
+        partyMode = value
+    end,
+})
+
+ Challenge:AddTextBox({
+    Name = "Host Player Name (Join Mode)",
+    Default = "",
+    Placeholder = "Enter host name...",
+    Callback = function(value)
+        hostPlayerName = value
+    end,
+})
+Challenge:AddInput({
+    Name = "Required Other Players (Host)",
+    Default = "1",
+    Placeholder = "Enter number...",
+    Callback = function(value)
+        local num = tonumber(value)
+        if num and num >= 0 then
+            requiredOtherPlayers = num
+        end
+    end,
+})
     Challenge:AddToggle({
         Name = "Auto Raid",
         Default = false,
@@ -309,9 +425,36 @@
         end,
     })
 
-    -- ==============================
-    -- HATCH TAB
-    -- ==============================
+    local Farm = Window:MakeTab({ "Farm", "pickaxe" })
+       Farm:AddDropdown({
+        Name = "Select Farm Map",
+        Options = {"Namex Planet","Colosseum Kingdom","Demon Forest","Dungeons Town"},
+        Default = select_world_main,
+        Flag = "Farm_Map",
+        Callback = function(value)
+            select_world_main = value
+        end,
+    })
+       Farm:AddTextBox({
+        Name = "Select NPC",
+        Default = select_npc_main,
+        Flag = "Farm_NPC",
+        ClearOnFocus = true,
+        Callback = function(value)
+            select_npc_main = value
+        end,
+       })
+       Farm:AddToggle({
+        Name = "Auto Farm Main World",
+        Default = false,
+        Flag = "Auto_Farm_Main",
+        Callback = function(value)
+            automain = value
+            if automain then
+                auto_main_world()
+            end
+        end,
+    })
     local Hatch = Window:MakeTab({ "Hatch", "egg" })
 
     Hatch:AddDropdown({
