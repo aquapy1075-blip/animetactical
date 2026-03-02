@@ -24,14 +24,20 @@
     -- ==============================
     -- RAID STATE CHECK
     -- ==============================
-    local function is_in_raid()
-        for _, child in pairs(RaidsVisual:GetChildren()) do
+  local function is_in_raid()
+    for _, child in pairs(RaidsVisual:GetChildren()) do
+        if partyMode == "Join" then
+            if hostPlayerName ~= "" and string.find(child.Name, hostPlayerName) then
+                return true
+            end
+        else
             if string.find(child.Name, player.Name) then
                 return true
             end
         end
-        return false
     end
+    return false
+end
 
     -- ==============================
     -- GET PARTY
