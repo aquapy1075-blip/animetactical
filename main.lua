@@ -57,6 +57,20 @@ local function party_has_required_members()
 
     return (#myParty:GetChildren() - 1) >= requiredOtherPlayers
 end
+
+local function other_party_exists()
+    local parties = ReplicatedStorage
+        :WaitForChild("Shared")
+        :WaitForChild("Parties")
+
+    for _, v in pairs(parties:GetChildren()) do
+        if v.Name ~= player.Name then
+            return true
+        end
+    end
+
+    return false
+end
     -- ==============================
     -- START RAID
     -- ==============================
@@ -76,6 +90,10 @@ end
 
         if not autoraid then return end
     end
+       while autoraid and other_party_exists() do
+               print("Có party khác đang tồn tại, chờ...")
+              task.wait(1)
+       end
 
     -- ===== TELEPORT LOGIC =====
     if select_map == "Double Dungeons" then
@@ -83,7 +101,7 @@ end
         ReplicatedStorage.ByteNetReliable:FireServer(
             buffer.fromstring("\005\r\000Dungeons Town")
         )
-
+    
         task.wait(1.5)
         hrp.CFrame = CFrame.new(-3025, 1040, -1859)
         task.wait(1.5)
@@ -117,19 +135,37 @@ end
     task.wait(0.5)
 
     -- ===== HOST WAIT FOR MEMBERS =====
-    if partyMode == "Host" then
-        local startWait = tick()
-        local WAIT_TIMEOUT = 60
+ if partyMode == "Host" then
 
-        repeat
-            task.wait(1)
-        until party_has_required_members()
-            or tick() - startWait > WAIT_TIMEOUT
+    local startWait = tick()
+    local WAIT_TIMEOUT = 25 -- nhỏ hơn 30 để tránh bị game kick
 
-        if not party_has_required_members() then
+    while autoraid do
+
+        task.wait(1)
+
+        -- nếu bị kick khỏi party thì thoát luôn
+        if not get_party() then
+            print("Bị kick khỏi party")
+            return
+        end
+
+        -- đủ người
+        if party_has_required_members() then
+            break
+        end
+
+        -- quá timeout
+        if tick() - startWait > WAIT_TIMEOUT then
+            print("Hết thời gian chờ member")
             return
         end
     end
+
+    if not party_has_required_members() then
+        return
+    end
+end
 
     -- ===== START RAID =====
     ReplicatedStorage.Remotes.Systems.RaidsEvent:FireServer(
