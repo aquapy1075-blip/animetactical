@@ -87,13 +87,35 @@ end
         while autoraid and not parties:FindFirstChild(hostPlayerName) do
             task.wait(0.5)
         end
-
-        if not autoraid then return end
+          if select_map == "Double Dungeons" then
+        -- Map này cần fire riêng
+        ReplicatedStorage.ByteNetReliable:FireServer(
+            buffer.fromstring("\005\r\000Dungeons Town")
+        )
+    
+        task.wait(1.5)
+        hrp.CFrame = CFrame.new(-3025, 1040, -1859)
+        task.wait(1.5)
+    else
+        local pod = workspace:WaitForChild("Raids_Entering"):WaitForChild("Pod_03")
+        hrp.CFrame = pod:GetPivot()
+        task.wait(1.5)
     end
-       while autoraid and other_party_exists() do
-               print("Có party khác đang tồn tại, chờ...")
-              task.wait(1)
-       end
+
+      return 
+    end
+         if partyMode ~= "Join" then
+        local startWait = tick()
+        local MAX_WAIT = 30
+
+        while autoraid and other_party_exists() do
+            task.wait(1)
+
+            if tick() - startWait > MAX_WAIT then
+                break
+            end
+        end
+    end
 
     -- ===== TELEPORT LOGIC =====
     if select_map == "Double Dungeons" then
