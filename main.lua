@@ -6,7 +6,12 @@
     local VirtualInputManager = game:GetService("VirtualInputManager")
     local player = Players.LocalPlayer
     local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/tlredz/Library/refs/heads/main/redz-V5-remake/main.luau"))()
-
+    local vu = game:GetService("VirtualUser")
+	game:GetService("Players").LocalPlayer.Idled:Connect(function()
+		vu:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+		task.wait(1)
+		vu:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+	end)
     -- ==============================
     -- SETTINGS
     -- ==============================
@@ -157,6 +162,23 @@ end
         return nil
     end
 
+    local function isBossAlive()
+    local server = workspace:FindFirstChild("Worlds")
+        and workspace.Worlds:FindFirstChild("Targets")
+        and workspace.Worlds.Targets:FindFirstChild("Server")
+
+    if not server then return false end
+
+    for _, v in pairs(server:GetChildren()) do
+        if string.find(v.Name, "BossFight") then
+            return true
+        end
+    end
+
+    return false
+end
+
+
     -- ==============================   
     -- INPUT
     -- ==============================
@@ -257,28 +279,22 @@ end
     -- ==============================
     -- AUTO RAID LOOP
     -- ==============================
-    local loop_running = false
-    local raidBusy = false
 
-    function auto_raid_loop()
-        if loop_running then return end
-        loop_running = true
-    while autoraid do
-            if not raidBusy then
-                raidBusy = true
-                if not is_in_raid() then auto_start_raid() end
-                repeat task.wait()
-                until is_in_raid()
-                task.wait()
-                clear_raid()
-                task.wait(1)
-                raidBusy = false
-            end
+function auto_raid_loop()
 
-            task.wait(1)
-        end
-        loop_running = false
+    if not autoraid then return end
+
+    if not is_in_raid() then
+        auto_start_raid()
+        repeat task.wait()
+        until is_in_raid() or not autoraid
     end
+
+    if not autoraid then return end
+
+    clear_raid()
+    task.wait(1)
+end
     -- ==============================
     -- Main World
     -- ==============================
@@ -305,104 +321,115 @@ local function isTargetUnit(unitName)
 end
 
 function auto_main_world()
-    while automain do
 
-         if bossActive then
-            task.wait(0.5)
-            continue
-        end
+    if not automain then return end
+    if bossActive then return end
 
- local maps = workspace:WaitForChild("Maps")
- if maps:FindFirstChild(select_world_main) == nil then 
-              local stringname = "\004\r\000" .. select_world_main
-              local args = {
-	             buffer.fromstring(stringname)
-              }
-              ReplicatedStorage.ByteNetReliable:FireServer(unpack(args))
-              task.wait(1.5)
- end
-        
-local server = workspace:FindFirstChild("Worlds")
-    and workspace.Worlds:FindFirstChild("Targets")
-    and workspace.Worlds.Targets:FindFirstChild("Server")
+    local maps = workspace:WaitForChild("Maps")
+    if not maps:FindFirstChild(select_world_main) then
+        local stringname = "\004\r\000" .. select_world_main
+        ReplicatedStorage.ByteNetReliable:FireServer(
+            buffer.fromstring(stringname)
+        )
+        task.wait(1.5)
+    end
 
-if not server then task.wait(1) continue end
+    local server = workspace.Worlds
+        and workspace.Worlds.Targets
+        and workspace.Worlds.Targets.Server
 
-        for _, mob in pairs(server:GetChildren()) do
-            if not automain or bossActive then break end
+    if not server then return end
 
-            local humanoid = mob:FindFirstChildOfClass("Humanoid")
-            if humanoid then
+    for _, mob in pairs(server:GetChildren()) do
 
-                local mobName = humanoid.DisplayName
+        if not automain or bossActive then break end
 
-                if isTargetUnit(mobName) then
+        local humanoid = mob:FindFirstChildOfClass("Humanoid")
+        if humanoid and isTargetUnit(humanoid.DisplayName) then
 
-                    -- Tele tới mob
-                    local character = player.Character
-                    if character and character:FindFirstChild("HumanoidRootPart") then
-                        local hrp = character.HumanoidRootPart
-                        hrp.CFrame = mob:GetPivot() * CFrame.new(0, 0, -5)
-                        task.wait(0.5)
-                    end
-
-                    -- Attack
-                    ReplicatedStorage.Remotes.Gameplays.Request:FireServer(mob.Name, "Mouse")
-
-                    -- chờ mob chết
-                    repeat
-                        task.wait(0.2)
-                    until not mob or not mob.Parent or bossActive
-                end
+            local character = player.Character
+            if character and character:FindFirstChild("HumanoidRootPart") then
+                character.HumanoidRootPart.CFrame =
+                    mob:GetPivot() * CFrame.new(0,0,-5)
             end
-        end
 
-        task.wait(0.3)
+            ReplicatedStorage.Remotes.Gameplays.Request:FireServer(
+                mob.Name, "Mouse"
+            )
+
+            repeat task.wait(0.2)
+            until not mob or not mob.Parent or bossActive
+        end
     end
 end
+
 function auto_boss()
-    while autoboss do
-        
-        local server = workspace:FindFirstChild("Worlds")
-            and workspace.Worlds:FindFirstChild("Targets")
-            and workspace.Worlds.Targets:FindFirstChild("Server")
 
-    
-            local bosses = {}
-            for _, obj in pairs(server:GetChildren()) do
-                if string.find(obj.Name, "BossFight") then
-                    table.insert(bosses, obj)
-                end
-            end
-            bossActive = (#bosses > 0)
-            if bossActive then
-                task.wait(5)
-                local firstBoss = bosses[1]
-                local character = player.Character
-                   or player.CharacterAdded:Wait()
-                local args = {
-	                 buffer.fromstring("\005\f\000Demon Forest")
-                 }
-               ReplicatedStorage.ByteNetReliable:FireServer(unpack(args))
-               task.wait(0.5)
+    print("=== AUTO BOSS START ===")
 
-                local hrp = character:WaitForChild("HumanoidRootPart")
-                local portal = workspace.Maps["Demon Forest"].Building.Portals
-                hrp.CFrame = portal:GetPivot()
-                task.wait(3)
-                if firstBoss:IsA("Model") then
-                    hrp.CFrame = firstBoss:GetPivot() * CFrame.new(0,0,-5)
-                elseif firstBoss:IsA("BasePart") then
-                    hrp.CFrame = firstBoss.CFrame * CFrame.new(0,0,-5)
-                end
+    -- Teleport map
+    print("Sending map request...")
+    ReplicatedStorage.ByteNetReliable:FireServer(
+        buffer.fromstring("\005\f\000Demon Forest")
+    )
+
+    task.wait(0.5)
+
+    local c = player.Character or player.CharacterAdded:Wait()
+    local hrp = c:WaitForChild("HumanoidRootPart")
+
+    print("Teleporting to portal...")
+    hrp.CFrame = workspace.Maps["Demon Forest"]
+        .Building.Portals:GetPivot()
+
+    task.wait(3)
+
+    local server = workspace:FindFirstChild("Worlds")
+        and workspace.Worlds:FindFirstChild("Targets")
+        and workspace.Worlds.Targets:FindFirstChild("Server")
+
+    if not server then
+        print("❌ Server folder not found")
+        return
+    end
+
+    print("Server folder found")
+
+    -- Debug: in hết object trong Server
+    for _, v in pairs(server:GetChildren()) do
+        print("Child:", v.Name)
+    end
+
+    print("Checking boss loop...")
+
+    while true do
+
+        local bossFound = false
+
+        for _, v in pairs(server:GetChildren()) do
+            if string.find(v.Name, "Boss") then
+                bossFound = true
+                print("Boss found:", v.Name)
+
+                hrp.CFrame = v:GetPivot() * CFrame.new(0,0,-5)
 
                 repeat
                     task.wait(0.5)
-                until not firstBoss or not firstBoss.Parent or not autoboss
-            end
+                until not v or not v.Parent
 
-        task.wait(1)
+                print("Boss died:", v.Name)
+            end
+        end
+
+        if not bossFound then
+            print("No boss currently alive")
+            break
+        end
+
+        task.wait(0.5)
     end
+
+    print("=== AUTO BOSS END ===")
 end
     -- ==============================
     -- HATCH
@@ -427,6 +454,38 @@ end
 
         hatch_loop_running = false
     end
+
+
+    local currentTask = nil
+
+task.spawn(function()
+    while true do
+        if currentTask == nil then
+            if autoraid and is_in_raid() then
+                currentTask = "raid"
+                auto_raid_loop()
+                currentTask = nil
+
+            elseif autoboss and isBossAlive() then
+                currentTask = "boss"
+                auto_boss()
+                currentTask = nil
+            
+            elseif autoraid then
+                currentTask = "raid"
+                auto_raid_loop()
+                currentTask = nil
+
+            elseif automain then
+                currentTask = "farm"
+                auto_main_world()
+                currentTask = nil
+            end
+        end
+
+        task.wait(1)
+    end
+end)
 
     -- ==============================
     -- UI
@@ -516,9 +575,6 @@ Challenge:AddTextBox({
         Flag = "Auto_Raid",
         Callback = function(value)
             autoraid = value
-            if autoraid then
-                auto_raid_loop()
-            end
         end,
     })
 
@@ -561,9 +617,6 @@ Farm:AddDropdown({
         Flag = "Auto_Farm_Mob",
         Callback = function(value)
             automain = value
-            if automain then
-                auto_main_world()
-            end
         end,
     })
     Farm:AddToggle({
@@ -571,9 +624,6 @@ Farm:AddDropdown({
     Default = false,
     Callback = function(value)
         autoboss = value
-        if autoboss then
-            task.spawn(auto_boss)
-        end
     end,
 })
     local Hatch = Window:MakeTab({ "Hatch", "egg" })
@@ -594,8 +644,8 @@ Farm:AddDropdown({
         Flag = "Auto_Hatch",
         Callback = function(value)
             autohatch = value
-            if autohatch then
-                auto_hatch()
-            end
+                if autohatch then
+                    auto_hatch()
+                end
         end,
     })
