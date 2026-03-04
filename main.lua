@@ -516,6 +516,102 @@ end
 
     local currentTask = nil
 
+    -- ==============================
+-- TRAIT SETTINGS
+-- ==============================
+local selectedUnitName = nil
+local selectedTraitSlot = "Primary"
+local selectedWantedTraits = {}
+local autoTrait = false
+local traitRolling = false
+
+local function getPlayerUnits()
+    local unitsFolder = ReplicatedStorage
+        :WaitForChild("Players_Data")
+        :WaitForChild(player.Name)
+        :WaitForChild("Inventory")
+        :WaitForChild("Units")
+
+    local list = {}
+
+    for _, unit in pairs(unitsFolder:GetChildren()) do
+        local primary = unit:FindFirstChild("Primary_Trait")
+        local sub = unit:FindFirstChild("Sub_Trait")
+
+        if primary and sub then
+
+            local cleanName = unit.Name:match("^[^%-]+")
+            cleanName = cleanName and cleanName:gsub("%s+$","") or unit.Name
+
+            local display = cleanName ..
+                " | P: " .. primary.Value ..
+                " | S: " .. sub.Value
+
+            list[display] = unit.Name
+        end
+    end
+
+    return list
+end
+local function hasWantedTrait(currentTrait)
+    for _, trait in ipairs(selectedWantedTraits) do
+         if currentTrait == trait then 
+            return true
+        end
+    end
+    return false
+end
+
+local function auto_roll_trait()
+    if traitRolling then return end
+    traitRolling = true
+
+    while autoTrait do
+
+        if not selectedUnitName then
+            task.wait(1)
+            continue
+        end
+
+        local unit = ReplicatedStorage
+            :WaitForChild("Players_Data")
+            :WaitForChild(player.Name)
+            .Inventory.Units
+            :FindFirstChild(selectedUnitName)
+
+        if not unit then
+            task.wait(1)
+            continue
+        end
+
+        local currentTrait
+
+        if selectedTraitSlot == "Primary" then
+            currentTrait = unit.Primary_Trait.Value
+        else
+            currentTrait = unit.Sub_Trait.Value
+        end
+
+        if hasWantedTrait(currentTrait) then
+            print("✅ Found:", currentTrait)
+            autoTrait = false
+            break
+        end
+        
+
+        ReplicatedStorage.Remotes.Gamblings.Traits:FireServer(
+                selectedUnitName,
+                selectedTraitSlot,
+                selectedWantedTraits,
+                false
+            )
+
+   task.wait(0.8)
+    end
+
+    traitRolling = false
+end
+
 task.spawn(function()
     while true do
         if currentTask == nil then
@@ -612,6 +708,7 @@ end)
     Name = "Host Player Name (Join Mode)",
     Default = "",
     Placeholder = "Enter host name...",
+    Flag = "Host_Player_Name",
     Callback = function(value)
         hostPlayerName = value
     end,
@@ -620,6 +717,7 @@ Challenge:AddTextBox({
     Name = "Required Other Players (Host)",
     Default = "1",
     Placeholder = "Enter number...",
+    Flag = "Required_Other_Players",
     Callback = function(value)
         local num = tonumber(value)
         if num and num >= 0 then
@@ -680,6 +778,7 @@ Farm:AddDropdown({
     Farm:AddToggle({
     Name = "Auto Boss",
     Default = false,
+    Flag = "Auto_Boss",
     Callback = function(value)
         autoboss = value
     end,
@@ -707,3 +806,76 @@ Farm:AddDropdown({
                 end
         end,
     })
+
+local UnitTab = Window:MakeTab({ "Unit", "sparkles" })
+
+UnitTab:AddSection("Trait")
+local unitDropdown
+local unitNameMap = {}
+
+unitDropdown = UnitTab:AddDropdown({
+    Name = "Select Unit",
+    Options = {},
+    Default = nil,
+    Flag = "Trait_Unit",
+    Callback = function(value)
+        selectedUnitName = unitNameMap[value]
+    end,
+})
+
+local function refreshUnits()
+    local units = getPlayerUnits()
+
+    local options = {}
+    unitNameMap = {}
+
+    for display, realName in pairs(units) do
+        table.insert(options, display)
+        unitNameMap[display] = realName
+    end
+
+    unitDropdown:NewOptions(options)
+end
+UnitTab:AddButton({
+    Name = "Refresh Units",
+    Callback = function()
+        refreshUnits()
+    end,
+})
+refreshUnits()
+local AllTraits = {"Abnormal_1","Annihilator_1","Archmage_1","Assault_1","Assault_2","Assault_3","CEO_1","Captain_1","Captain_2","Captain_3","Deadeye_1","Executor_1","Extremist_1","Fortunate_1","Genius_1","Genius_2","Genius_3","Gods Blessing_1","Godspeed_1","Kingslayer_1","Leader_1","Lucky_1","Lucky_2","Lucky_3","Prodigy_1","Rich_1","Rich_2","Rich_3","Slowpoke_1","Sniper_1","Speed_1","Speed_2","Speed_3","Tiny_1"}
+UnitTab:AddDropdown({
+    Name = "Select Wanted Traits",
+    MultiSelect = true,
+    Options = AllTraits,
+    Default = {},
+    Flag = "Selected_Traits",
+    Callback = function(value)
+        selectedWantedTraits = {}
+        for name, state in pairs(value) do
+            if state then
+                table.insert(selectedWantedTraits, name)
+            end
+        end
+    end,
+})
+UnitTab:AddDropdown({
+    Name = "Select Trait Slot",
+    Options = {"Primary", "Sub"},
+    Default = "Primary",
+    Flag = "Trait_Slot",
+    Callback = function(value)
+        selectedTraitSlot = value
+    end,
+})
+
+UnitTab:AddToggle({
+    Name = "Auto Roll Trait",
+    Default = false,
+    Callback = function(value)
+        autoTrait = value
+        if autoTrait then
+            auto_roll_trait()
+        end
+    end,
+})
