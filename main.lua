@@ -787,7 +787,7 @@ Farm:AddDropdown({
 
     Hatch:AddDropdown({
         Name = "Select Hatch Map",
-        Options = {"Namex Planet","Colosseum Kingdom","Demon Forest","Dungeons Town"},
+        Options = {"Namex Planet","Colosseum Kingdom","Demon Forest","Dungeons Town", "Reaper Society"},
         Default = select_hatch_map,
         Flag = "Hatch_Map",
         Callback = function(value)
